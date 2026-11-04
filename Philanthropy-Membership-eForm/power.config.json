@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "appId": null,
+  "appDisplayName": "Philanthropy Membership - eForm",
+  "region": "prod",
+  "appType": "CodeApp",
+  "environmentId": "a43b39ce-712d-e4e1-b1c0-d70cb694e01d",
+  "description": " ",
+  "buildPath": "./dist",
+  "buildEntryPoint": "index.html",
+  "localAppUrl": "http://localhost:3000",
+  "logoPath": "Default",
+  "connectionReferences": {
+    "0a8ed045-a1ca-4892-8187-753ecb6f9e67": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sql",
+      "displayName": "SQL Server",
+      "dataSources": [
+        "membershiporganization",
+        "philanthropymembershiporgrequest",
+        "tablecode",
+        "workflowlog"
+      ],
+      "authenticationType": "sqlAuthentication",
+      "sharedConnectionId": "/providers/Microsoft.PowerApps/apis/shared_sql/connections/01cd77bc513345a292efacb75f81aea5",
+      "dataSets": {
+        "aecf-eforms2-sql-uat.database.windows.net,aec-eforms2-uat-sqldb": {
+          "dataSources": {
+            "membershiporganization": {
+              "tableName": "[dbo].[MembershipOrganization]"
+            },
+            "philanthropymembershiporgrequest": {
+              "tableName": "[dbo].[PhilanthropyMembershipOrgRequest]"
+            },
+            "tablecode": {
+              "tableName": "[dbo].[TableCode]"
+            },
+            "workflowlog": {
+              "tableName": "[dbo].[WorkflowLog]"
+            }
+          }
+        }
+      },
+      "xrmConnectionReferenceLogicalName": "new_sharedsql_0e295"
+    }
+  },
+  "databaseReferences": {}
+}
