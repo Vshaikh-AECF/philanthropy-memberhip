@@ -18,7 +18,8 @@
         "membershiporganization",
         "philanthropymembershiporgrequest",
         "tablecode",
-        "workflowlog"
+        "workflowlog",
+        "navigation"
       ],
       "authenticationType": "sqlAuthentication",
       "sharedConnectionId": "/providers/Microsoft.PowerApps/apis/shared_sql/connections/01cd77bc513345a292efacb75f81aea5",
@@ -36,6 +37,9 @@
             },
             "workflowlog": {
               "tableName": "[dbo].[WorkflowLog]"
+            },
+            "navigation": {
+              "tableName": "[dbo].[Navigation]"
             }
           }
         }

@@ -12,6 +12,13 @@ export const dataSourcesInfo = {
     "dataSourceType": "Connector",
     "apis": {}
   },
+  "navigation": {
+    "tableId": "[dbo].[Navigation]",
+    "version": "v2",
+    "primaryKey": "NavID",
+    "dataSourceType": "Connector",
+    "apis": {}
+  },
   "philanthropymembershiporgrequest": {
     "tableId": "[dbo].[PhilanthropyMembershipOrgRequest]",
     "version": "v2",
