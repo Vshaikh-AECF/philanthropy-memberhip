@@ -2,6 +2,7 @@ import { getContext } from '@microsoft/power-apps/app'
 import { useEffect, useState, type FormEvent } from 'react'
 import { MembershipOrganizationService } from './generated/services/MembershipOrganizationService'
 import { NavigationService } from './generated/services/NavigationService'
+import { Office365UsersService } from './generated/services/Office365UsersService'
 import { PhilanthropyMembershipOrgRequestService } from './generated/services/PhilanthropyMembershipOrgRequestService'
 import { TableCodeService } from './generated/services/TableCodeService'
 import { WorkflowLogService } from './generated/services/WorkflowLogService'
@@ -63,6 +64,7 @@ const getEasternDateTime = (date: Date) => {
 function App() {
   const [organizations, setOrganizations] = useState<MembershipOrganization[]>([])
   const [requester, setRequester] = useState('')
+  const [requesterEmail, setRequesterEmail] = useState('')
   const [selectedOrganizationId, setSelectedOrganizationId] = useState('')
   const [newOrganization, setNewOrganization] = useState('')
   const [sponsor, setSponsor] = useState('')
@@ -102,14 +104,27 @@ function App() {
         if (hostRequestId) {
           setRequestId((currentRequestId) => currentRequestId || hostRequestId)
         }
-        const name = context.user.fullName || context.user.userPrincipalName || ''
-        console.log("User Context:", context.user);
-
-        if (name) {
-          setRequester(name)
-        } else {
-          setPageError('Your signed-in name could not be loaded.')
-        }
+        //return Office365UsersService.MyProfile_V2('displayName')
+        return Office365UsersService.MyProfile_V2()
+          .then((profileResult) => {
+            console.log('profileResult', profileResult)
+            if (!active) return
+            if (!profileResult.success) {
+              throw new Error(
+                profileResult.error?.message ?? 'The Office 365 Users connector returned an error.',
+              )
+            }
+            //const name = profileResult.data.displayName
+            const name = `${profileResult?.data?.givenName ?? ""} ${profileResult?.data?.surname ?? ""}`.trim()
+            if (!name) {
+              throw new Error('The Office 365 Users profile did not include a display name.')
+            }
+            if (!profileResult.data.mail) {
+              throw new Error('The Office 365 Users profile did not include an email address.')
+            }
+            setRequester(name)
+            setRequesterEmail(profileResult.data.mail)
+          })
       })
       .catch((error: unknown) => {
         if (active) {
@@ -307,11 +322,16 @@ function App() {
       const errors = validate()
       setFieldErrors(errors)
       if (Object.keys(errors).length > 0) return
-      if (!requester) {
-        setPageError('Your signed-in name is not available. The request was not submitted.')
+      if (!requester || !requesterEmail) {
+        setPageError('Your signed-in name or email is not available. The request was not submitted.')
         return
       }
       setShowSubmitConfirmation(true)
+      return
+    }
+
+    if (!requester || !requesterEmail) {
+      setPageError('Your signed-in name or email is not available. The request was not submitted.')
       return
     }
 
@@ -344,6 +364,8 @@ function App() {
       const requestResult = await PhilanthropyMembershipOrgRequestService.create({
         MembershipOrganizationId: organizationId,
         Requester: requester,
+        RequesterEmail: requesterEmail,
+        RequestDate: requestTimestamp,
         Amount: Number(amount),
         StartDate: parseUsDate(startDate),
         EndDate: parseUsDate(endDate),
@@ -707,7 +729,7 @@ function App() {
           <p>Please click <strong>Submit</strong> when you are ready to submit this form.</p>
           {pageError && <p className="page-error" role="alert">{pageError}</p>}
           <div className="button-row">
-            <button type="submit" disabled={isSubmitting || !requester || Boolean(savedRequest)}>
+            <button type="submit" disabled={isSubmitting || !requester || !requesterEmail || Boolean(savedRequest)}>
               Submit
             </button>
             <button

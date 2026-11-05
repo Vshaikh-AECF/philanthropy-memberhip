@@ -18,4 +18,6 @@ export interface PhilanthropyMembershipOrgRequest {
   IsDeleted?: boolean;
   DeletedAt?: string | null;
   DeletedBy?: string | null;
+  RequesterEmail: string;
+  RequestDate: string;
 }

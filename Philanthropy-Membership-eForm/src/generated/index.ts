@@ -7,6 +7,7 @@
 export * as CommonModels from './models/CommonModels';
 export * as MembershipOrganizationModel from './models/MembershipOrganizationModel';
 export * as NavigationModel from './models/NavigationModel';
+export * as Office365UsersModel from './models/Office365UsersModel';
 export * as PhilanthropyMembershipOrgRequestModel from './models/PhilanthropyMembershipOrgRequestModel';
 export * as TableCodeModel from './models/TableCodeModel';
 export * as WorkflowLogModel from './models/WorkflowLogModel';
@@ -14,6 +15,7 @@ export * as WorkflowLogModel from './models/WorkflowLogModel';
 // Services
 export * from './services/MembershipOrganizationService';
 export * from './services/NavigationService';
+export * from './services/Office365UsersService';
 export * from './services/PhilanthropyMembershipOrgRequestService';
 export * from './services/TableCodeService';
 export * from './services/WorkflowLogService';

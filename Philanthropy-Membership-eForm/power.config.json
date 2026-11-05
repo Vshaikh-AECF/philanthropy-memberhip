@@ -45,6 +45,14 @@
         }
       },
       "xrmConnectionReferenceLogicalName": "new_sharedsql_0e295"
+    },
+    "76a9f0fb-40de-48e7-89a1-489ba667ea07": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365users",
+      "displayName": "Office 365 Users",
+      "dataSources": [
+        "office365users"
+      ],
+      "dataSets": {}
     }
   },
   "databaseReferences": {}
