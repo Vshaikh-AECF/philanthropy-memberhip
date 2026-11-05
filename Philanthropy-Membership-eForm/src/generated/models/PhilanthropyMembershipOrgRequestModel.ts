@@ -11,4 +11,11 @@ export interface PhilanthropyMembershipOrgRequest {
   StartDate: string;
   EndDate: string;
   Description?: string;
+  CreatedAt?: string;
+  CreatedBy?: string;
+  UpdateAt?: string;
+  UpdatedBy?: string;
+  IsDeleted?: boolean;
+  DeletedAt?: string | null;
+  DeletedBy?: string | null;
 }

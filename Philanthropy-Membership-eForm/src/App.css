@@ -48,11 +48,121 @@
   box-shadow: 0 2px 4px rgb(41 34 20 / 16%);
 }
 
+.workflow-panel {
+  margin-top: 8px;
+  padding: 14px;
+  overflow: hidden;
+  background: #f7efd3;
+  border-radius: 7px;
+}
+
+.workflow-panel h2 {
+  margin: 0 0 18px;
+  color: #789900;
+  font-size: 1.15rem;
+}
+
+.workflow-table-wrap {
+  overflow-x: auto;
+}
+
+.workflow-table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  text-align: left;
+  table-layout: fixed;
+}
+
+.workflow-table th,
+.workflow-table td {
+  padding: 8px 12px;
+  vertical-align: top;
+}
+
+.workflow-table th {
+  color: #789900;
+  font-size: 1rem;
+}
+
+.workflow-table th:first-child,
+.workflow-table td:first-child {
+  width: 16%;
+}
+
+.workflow-table th:nth-child(2),
+.workflow-table td:nth-child(2) {
+  width: 18%;
+}
+
+.workflow-table th:nth-child(3),
+.workflow-table td:nth-child(3) {
+  width: 20%;
+}
+
+.workflow-table th:nth-child(4),
+.workflow-table td:nth-child(4) {
+  width: 14%;
+}
+
+.workflow-table th:last-child,
+.workflow-table td:last-child {
+  width: 32%;
+}
+
+.workflow-table td {
+  overflow-wrap: anywhere;
+}
+
 .form-panel h2 {
   margin: 0 0 10px;
   color: #171717;
   font-size: 1rem;
   font-weight: 700;
+}
+
+.not-found-panel {
+  max-width: 760px;
+  margin: clamp(24px, 8vh, 72px) 0;
+}
+
+.not-found-panel h1 {
+  margin: 0 0 10px;
+  color: #171717;
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+}
+
+.not-found-panel p {
+  margin: 0;
+}
+
+.page-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 38px;
+  background: #d7dee2;
+  color: #111;
+  font-size: clamp(1.1rem, 2.2vw, 1.5rem);
+}
+
+.page-loader-spinner {
+  width: 54px;
+  height: 54px;
+  border: 5px solid #f6a15c;
+  border-bottom-color: #e85c00;
+  border-radius: 50%;
+  animation: page-loader-spin 0.9s linear infinite;
+}
+
+@keyframes page-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .request-details {
@@ -111,6 +221,13 @@
 
 .field select {
   grid-column: auto;
+}
+
+.field select:disabled {
+  background-color: #fff;
+  color: #222;
+  opacity: 1;
+  -webkit-text-fill-color: #222;
 }
 
 .organization-controls {
@@ -295,8 +412,7 @@
 }
 
 .button-row button:disabled {
-  cursor: wait;
-  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .button-row .secondary-button {
@@ -306,6 +422,64 @@
 .button-row button,
 .button-row button:hover:not(:disabled) {
   background: #a94c00;
+}
+
+.confirmation-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 52%);
+}
+
+.confirmation-dialog {
+  width: min(100%, 616px);
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+  padding: 24px;
+  background: #fff;
+  text-align: center;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
+}
+
+.confirmation-dialog p {
+  margin: 0;
+  font-size: clamp(1rem, 2.4vw, 1.25rem);
+  font-weight: 600;
+}
+
+.confirmation-actions {
+  display: flex;
+  justify-content: center;
+  gap: clamp(16px, 7vw, 50px);
+}
+
+.confirmation-actions button {
+  min-width: 120px;
+  min-height: 44px;
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 5px;
+  background: #b94100;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirmation-actions .cancel-button {
+  background: #666;
+}
+
+.confirmation-actions button:focus-visible {
+  outline: 3px solid #302044;
+  outline-offset: 3px;
 }
 
 .visually-hidden {
