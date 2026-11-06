@@ -39,6 +39,20 @@
   font-weight: 700;
 }
 
+.header-nav button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.header-nav button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
 .form-panel {
   margin-top: 4px;
   padding: 12px 20px 16px;
@@ -564,7 +578,7 @@
   .header-nav {
     grid-column: 1;
     grid-row: 2;
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 
   .topbar h1 {

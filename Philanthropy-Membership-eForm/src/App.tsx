@@ -80,6 +80,7 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false)
+  const [showNavigationConfirmation, setShowNavigationConfirmation] = useState(false)
   const [contextLoaded, setContextLoaded] = useState(false)
   const [organizationsLoaded, setOrganizationsLoaded] = useState(false)
   const [loadedRequestId, setLoadedRequestId] = useState('')
@@ -513,9 +514,9 @@ function App() {
         />
         <h1>Philanthropy Membership - Request</h1>
         <nav className="header-nav" aria-label="Main navigation">
-          <span>eForms</span>
-          <span>OPS</span>
-          <span>Help</span>
+          <button type="button" onClick={() => setShowNavigationConfirmation(true)}>
+            eForms
+          </button>
         </nav>
       </header>
 
@@ -803,6 +804,38 @@ function App() {
                 className="cancel-button"
                 type="button"
                 onClick={() => setShowSubmitConfirmation(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {showNavigationConfirmation && (
+        <div className="confirmation-backdrop">
+          <section
+            className="confirmation-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="navigation-confirmation-message"
+          >
+            <p id="navigation-confirmation-message">
+              Are you sure you want to leave this form?
+            </p>
+            <div className="confirmation-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNavigationConfirmation(false)
+                  void handleClose()
+                }}
+              >
+                Ok
+              </button>
+              <button
+                className="cancel-button"
+                type="button"
+                onClick={() => setShowNavigationConfirmation(false)}
               >
                 Cancel
               </button>
