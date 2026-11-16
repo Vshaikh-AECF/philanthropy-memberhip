@@ -8,6 +8,8 @@ export interface PhilanthropyMembershipOrgRequest {
   MembershipOrganizationId: number;
   Requester: string;
   Amount: number;
+  Return?: number;
+  Decline?: number;
   StartDate: string;
   EndDate: string;
   Description?: string;

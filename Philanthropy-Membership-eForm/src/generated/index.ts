@@ -4,7 +4,9 @@
  */
 
 // Models
+export * as CaseyAdminFlowv1Model from './models/CaseyAdminFlowv1Model';
 export * as CommonModels from './models/CommonModels';
+export * as GroupDetailsModel from './models/GroupDetailsModel';
 export * as MembershipOrganizationModel from './models/MembershipOrganizationModel';
 export * as NavigationModel from './models/NavigationModel';
 export * as Office365UsersModel from './models/Office365UsersModel';
@@ -13,6 +15,8 @@ export * as TableCodeModel from './models/TableCodeModel';
 export * as WorkflowLogModel from './models/WorkflowLogModel';
 
 // Services
+export * from './services/CaseyAdminFlowv1Service';
+export * from './services/GroupDetailsService';
 export * from './services/MembershipOrganizationService';
 export * from './services/NavigationService';
 export * from './services/Office365UsersService';

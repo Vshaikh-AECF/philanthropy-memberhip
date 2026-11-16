@@ -1,5 +1,7 @@
 import { getContext } from '@microsoft/power-apps/app'
 import { useEffect, useState, type FormEvent } from 'react'
+import { CaseyAdminFlowv1Service } from './generated/services/CaseyAdminFlowv1Service'
+import { GroupDetailsService } from './generated/services/GroupDetailsService'
 import { MembershipOrganizationService } from './generated/services/MembershipOrganizationService'
 import { NavigationService } from './generated/services/NavigationService'
 import { Office365UsersService } from './generated/services/Office365UsersService'
@@ -368,6 +370,8 @@ function App() {
         RequesterEmail: requesterEmail,
         RequestDate: requestTimestamp,
         Amount: Number(amount),
+        Return: 0,
+        Decline: 0,
         StartDate: parseUsDate(startDate),
         EndDate: parseUsDate(endDate),
         Description: description.trim() || undefined,
@@ -440,9 +444,72 @@ function App() {
         throw new Error('The request was saved, but no NavURL was found for PhilanthropyMembership.')
       }
 
+      const distributionGroupName =
+        !isNewOrganization &&
+        Number(amount) === organizations.find((organization) => organization.Id === organizationId)?.Amount
+          ? 'PhilanthropyGroup2'
+          : 'PhilanthropyGroup1'
+      const groupDetailsResult = await GroupDetailsService.getAll({
+        filter: `MSGroupName eq '${distributionGroupName}'`,
+        top: 1,
+        select: ['MSGroupName', 'MSDistributionName'],
+      })
+      if (!groupDetailsResult.success) {
+        throw new Error(
+          `The request was saved, but its distribution email could not be loaded: ${groupDetailsResult.error?.message ?? 'The GroupDetails data source returned an error.'}`,
+        )
+      }
+      const distributionEmail = groupDetailsResult.data.find(
+        (group) => group.MSGroupName === distributionGroupName,
+      )?.MSDistributionName
+      if (!distributionEmail) {
+        throw new Error(`The request was saved, but no distribution email was found for ${distributionGroupName}.`)
+      }
+
       const createdRequestId = String(requestResult.data.Id)
       const url = new URL(destination, window.location.href)
       url.searchParams.set('requestid', createdRequestId)
+      const organizationName = isNewOrganization
+        ? newOrganization.trim()
+        : organizations.find((organization) => organization.Id === organizationId)?.MemberOrganization
+      if (!organizationName) {
+        throw new Error('The request was saved, but the selected organization name could not be determined.')
+      }
+      const emailBody = [
+        'Philanthropy Membership Org',
+        '',
+        `1. Name of Philanthropic Membership Organization: ${organizationName}`,
+        `2. Your name and name of Internal Sponsor/Liaison if different: ${requester} / ${sponsor.trim()}`,
+        `3. Amount of membership fee (Please note if the amount is different than last year): ${amount}`,
+        `4. Start and end date for membership: ${startDate} - ${endDate}`,
+        `5. In a few sentences, please explain the value of this membership and to the work of others in the Foundation. (Include this information in the Purpose field in GMS when completing the request): ${description.trim()}`,
+        '',
+        `Link to the eForm request: ${url.href}`,
+      ].join('\n')
+      const emailInput = {
+        text_1: 'Philanthropy Membership Org - Request',
+        text: emailBody,
+        email_1: '',
+      }
+      const requesterEmailResult = await CaseyAdminFlowv1Service.Run({
+        ...emailInput,
+        email: requesterEmail,
+      })
+      if (!requesterEmailResult.success) {
+        throw new Error(
+          `The request was saved, but the requester email could not be sent: ${requesterEmailResult.error?.message ?? 'Casey Admin Flow v1 returned an error.'}`,
+        )
+      }
+      const distributionEmailResult = await CaseyAdminFlowv1Service.Run({
+        ...emailInput,
+        email: distributionEmail,
+      })
+      if (!distributionEmailResult.success) {
+        throw new Error(
+          `The request was saved, but the distribution email could not be sent: ${distributionEmailResult.error?.message ?? 'Casey Admin Flow v1 returned an error.'}`,
+        )
+      }
+
       setRequestId(createdRequestId)
       window.location.href = url.href
     } catch (error) {
@@ -767,6 +834,7 @@ function App() {
                       year: 'numeric',
                       hour: 'numeric',
                       minute: '2-digit',
+                      hourCycle: 'h23',
                     })}</td>
                     <td>{log.ActivityName}</td>
                     <td>{log.ActivityUser}</td>
