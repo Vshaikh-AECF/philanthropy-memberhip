@@ -372,10 +372,38 @@ function App() {
         organizationId = Number(selectedOrganizationId)
       }
 
+      const distributionGroupName =
+        !isNewOrganization &&
+        Number(amount) === organizations.find((organization) => organization.Id === organizationId)?.Amount
+          ? 'PhilanthropyGroup2'
+          : 'PhilanthropyGroup1'
+      const groupDetailsResult = await GroupDetailsService.getAll({
+        filter: `MSGroupName eq '${distributionGroupName}'`,
+        top: 1,
+        select: ['GroupName', 'MSGroupName', 'MSDistributionName'],
+      })
+      if (!groupDetailsResult.success) {
+        throw new Error(
+          `The request could not be submitted because its approver and distribution email could not be loaded: ${groupDetailsResult.error?.message ?? 'The GroupDetails data source returned an error.'}`,
+        )
+      }
+      const selectedGroup = groupDetailsResult.data.find(
+        (group) => group.MSGroupName === distributionGroupName,
+      )
+      if (!selectedGroup?.GroupName) {
+        throw new Error(`The request could not be submitted because no approver was found for ${distributionGroupName}.`)
+      }
+      const distributionEmail = selectedGroup.MSDistributionName
+      if (!distributionEmail) {
+        throw new Error(`The request could not be submitted because no distribution email was found for ${distributionGroupName}.`)
+      }
+
       const requestTimestamp = getEasternDateTime(new Date())
       const requestResult = await PhilanthropyMembershipOrgRequestService.create({
         MembershipOrganizationId: organizationId,
         Requester: requester,
+        Approver: selectedGroup.GroupName,
+        ApproverEmail: distributionEmail,
         RequesterEmail: requesterEmail,
         RequestDate: requestTimestamp,
         Amount: Number(amount),
@@ -451,28 +479,6 @@ function App() {
       )?.NavURL
       if (!destination) {
         throw new Error('The request was saved, but no NavURL was found for PhilanthropyMembership.')
-      }
-
-      const distributionGroupName =
-        !isNewOrganization &&
-        Number(amount) === organizations.find((organization) => organization.Id === organizationId)?.Amount
-          ? 'PhilanthropyGroup2'
-          : 'PhilanthropyGroup1'
-      const groupDetailsResult = await GroupDetailsService.getAll({
-        filter: `MSGroupName eq '${distributionGroupName}'`,
-        top: 1,
-        select: ['MSGroupName', 'MSDistributionName'],
-      })
-      if (!groupDetailsResult.success) {
-        throw new Error(
-          `The request was saved, but its distribution email could not be loaded: ${groupDetailsResult.error?.message ?? 'The GroupDetails data source returned an error.'}`,
-        )
-      }
-      const distributionEmail = groupDetailsResult.data.find(
-        (group) => group.MSGroupName === distributionGroupName,
-      )?.MSDistributionName
-      if (!distributionEmail) {
-        throw new Error(`The request was saved, but no distribution email was found for ${distributionGroupName}.`)
       }
 
       const createdRequestId = String(requestResult.data.Id)

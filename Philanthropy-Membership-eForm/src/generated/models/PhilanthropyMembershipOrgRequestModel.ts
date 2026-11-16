@@ -7,6 +7,8 @@ export interface PhilanthropyMembershipOrgRequest {
   Id?: number;
   MembershipOrganizationId: number;
   Requester: string;
+  Approver: string;
+  ApproverEmail: string;
   Amount: number;
   Return?: number;
   Decline?: number;
