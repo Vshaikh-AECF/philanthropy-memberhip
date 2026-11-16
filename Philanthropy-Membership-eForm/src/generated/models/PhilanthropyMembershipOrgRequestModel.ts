@@ -8,7 +8,18 @@ export interface PhilanthropyMembershipOrgRequest {
   MembershipOrganizationId: number;
   Requester: string;
   Amount: number;
+  Return?: number;
+  Decline?: number;
   StartDate: string;
   EndDate: string;
   Description?: string;
+  CreatedAt?: string;
+  CreatedBy?: string;
+  UpdateAt?: string;
+  UpdatedBy?: string;
+  IsDeleted?: boolean;
+  DeletedAt?: string | null;
+  DeletedBy?: string | null;
+  RequesterEmail: string;
+  RequestDate: string;
 }

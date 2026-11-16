@@ -18,7 +18,9 @@
         "membershiporganization",
         "philanthropymembershiporgrequest",
         "tablecode",
-        "workflowlog"
+        "workflowlog",
+        "navigation",
+        "groupdetails"
       ],
       "authenticationType": "sqlAuthentication",
       "sharedConnectionId": "/providers/Microsoft.PowerApps/apis/shared_sql/connections/01cd77bc513345a292efacb75f81aea5",
@@ -36,11 +38,37 @@
             },
             "workflowlog": {
               "tableName": "[dbo].[WorkflowLog]"
+            },
+            "navigation": {
+              "tableName": "[dbo].[Navigation]"
+            },
+            "groupdetails": {
+              "tableName": "[dbo].[GroupDetails]"
             }
           }
         }
       },
       "xrmConnectionReferenceLogicalName": "new_sharedsql_0e295"
+    },
+    "76a9f0fb-40de-48e7-89a1-489ba667ea07": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365users",
+      "displayName": "Office 365 Users",
+      "dataSources": [
+        "office365users"
+      ],
+      "dataSets": {}
+    },
+    "f7370fd9-412d-48fe-85f8-99b59a4528b5": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "caseyadminflowv1"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "217351bc-f6b6-ef11-b8e8-0022482861c4",
+        "workflowDisplayName": "Casey Admin Flow v1",
+        "workflowName": "cba34f0b-9497-35de-5245-dc687e9c5b16"
+      }
     }
   },
   "databaseReferences": {}
