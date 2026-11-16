@@ -63,6 +63,15 @@ const getEasternDateTime = (date: Date) => {
   return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}`
 }
 
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character] ?? character)
+
 function App() {
   const [organizations, setOrganizations] = useState<MembershipOrganization[]>([])
   const [requester, setRequester] = useState('')
@@ -226,7 +235,7 @@ function App() {
         setRequester(request.Requester)
         setSelectedOrganizationId(String(request.MembershipOrganizationId))
         setSponsor(organization?.InternalSponsor ?? '')
-        setAmount(String(request.Amount))
+        setAmount(Number(request.Amount).toFixed(2))
         setStartDate(formatUsDate(request.StartDate))
         setEndDate(formatUsDate(request.EndDate))
         setDescription(request.Description ?? '')
@@ -475,17 +484,27 @@ function App() {
       if (!organizationName) {
         throw new Error('The request was saved, but the selected organization name could not be determined.')
       }
-      const emailBody = [
-        'Philanthropy Membership Org',
-        '',
-        `1. Name of Philanthropic Membership Organization: ${organizationName}`,
-        `2. Your name and name of Internal Sponsor/Liaison if different: ${requester} / ${sponsor.trim()}`,
-        `3. Amount of membership fee (Please note if the amount is different than last year): ${amount}`,
-        `4. Start and end date for membership: ${startDate} - ${endDate}`,
-        `5. In a few sentences, please explain the value of this membership and to the work of others in the Foundation. (Include this information in the Purpose field in GMS when completing the request): ${description.trim()}`,
-        '',
-        `Link to the eForm request: ${url.href}`,
-      ].join('\n')
+      const log = workflowResult.data
+      const emailBody = `
+        <p><a href="${escapeHtml(url.href)}">Click here to open the worklist item</a></p>
+        <p style="margin:0 0 12px;color:#789900;font-weight:700;">Philanthropy Membership Org</p>
+        <ol style="margin:0;padding-left:24px;">
+          <li>Name of Philanthropic Membership Organization: ${escapeHtml(organizationName)}</li>
+          <li>Your name and name of Internal Sponsor/Liaison if different: ${escapeHtml(requester)} / ${escapeHtml(sponsor.trim())}</li>
+          <li>Amount of membership fee (Please note if the amount is different than last year): $${escapeHtml(Number(amount).toFixed(2))}</li>
+          <li>Start and end date for membership: ${escapeHtml(startDate)} - ${escapeHtml(endDate)}</li>
+          <li>In a few sentences, please explain the value of this membership and to the work of others in the Foundation. (Include this information in the Purpose field in GMS when completing the request): ${escapeHtml(description.trim())}</li>
+        </ol>
+        <br>
+        <p style="margin:0 0 4px;color:#789900;font-weight:700;">Process Log</p>
+        <table style="width:100%;border-collapse:collapse;text-align:left;">
+          <tbody>
+            <tr>
+              <td style="padding:1px 4px;">${escapeHtml(log.ActivityDate)}, ${escapeHtml(log.ActivityName)}, ${escapeHtml(log.ActivityUser)}, ${escapeHtml(log.ActivityAction)}, Notes: ${escapeHtml(log.NoteText ?? '')}</td>
+            </tr>
+          </tbody>
+        </table>
+      `
       const emailInput = {
         text_1: 'Philanthropy Membership Org - Request',
         text: emailBody,
@@ -617,7 +636,7 @@ function App() {
                     )
                     setSelectedOrganizationId(organizationId)
                     setSponsor(organization?.InternalSponsor ?? '')
-                    setAmount(organization ? String(organization.Amount) : '')
+                    setAmount(organization ? Number(organization.Amount).toFixed(2) : '')
                   }}
                   aria-invalid={Boolean(fieldErrors.organization)}
                   aria-describedby={fieldErrors.organization ? 'organization-error' : undefined}
@@ -680,13 +699,16 @@ function App() {
               </label>
               <input
                 id="amount"
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
                 inputMode="decimal"
                 disabled={Boolean(savedRequest)}
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
+                onBlur={() => {
+                  if (amount.trim() && /^\d+(\.\d{1,2})?$/.test(amount)) {
+                    setAmount(Number(amount).toFixed(2))
+                  }
+                }}
                 aria-invalid={Boolean(fieldErrors.amount)}
                 aria-describedby={fieldErrors.amount ? 'amount-error' : 'amount-note'}
               />
