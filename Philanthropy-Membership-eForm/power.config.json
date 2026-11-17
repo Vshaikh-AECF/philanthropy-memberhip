@@ -20,7 +20,8 @@
         "tablecode",
         "workflowlog",
         "navigation",
-        "groupdetails"
+        "groupdetails",
+        "efmmoduleapprove"
       ],
       "authenticationType": "sqlAuthentication",
       "sharedConnectionId": "/providers/Microsoft.PowerApps/apis/shared_sql/connections/01cd77bc513345a292efacb75f81aea5",
@@ -44,6 +45,9 @@
             },
             "groupdetails": {
               "tableName": "[dbo].[GroupDetails]"
+            },
+            "efmmoduleapprove": {
+              "tableName": "[dbo].[EFMModuleApprove]"
             }
           }
         }

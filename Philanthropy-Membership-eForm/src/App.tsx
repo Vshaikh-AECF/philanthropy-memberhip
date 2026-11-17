@@ -1,6 +1,7 @@
 import { getContext } from '@microsoft/power-apps/app'
 import { useEffect, useState, type FormEvent } from 'react'
 import { CaseyAdminFlowv1Service } from './generated/services/CaseyAdminFlowv1Service'
+import { EFMModuleApproveService } from './generated/services/EFMModuleApproveService'
 import { GroupDetailsService } from './generated/services/GroupDetailsService'
 import { MembershipOrganizationService } from './generated/services/MembershipOrganizationService'
 import { NavigationService } from './generated/services/NavigationService'
@@ -63,14 +64,109 @@ const getEasternDateTime = (date: Date) => {
   return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}`
 }
 
+const getIndiaDateTime = (date: Date) => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? ''
+
+  return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}`
+}
+
+const formatEmailDateTime = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value)
+  return match ? `${match[2]}/${match[3]}/${match[1]} ${match[4]}:${match[5]}` : value
+}
+
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character] ?? character)
+
+type EmailWorkflowLog = Awaited<ReturnType<typeof WorkflowLogService.getAll>>['data'][number]
+
+const buildRequestEmailBody = ({
+  href,
+  organizationName,
+  requester,
+  sponsor,
+  amount,
+  startDate,
+  endDate,
+  description,
+  nextDestination,
+  requestId,
+  logs,
+}: {
+  href: string
+  organizationName: string
+  requester: string
+  sponsor: string
+  amount: number
+  startDate: string
+  endDate: string
+  description: string
+  nextDestination?: string
+  requestId: string
+  logs: EmailWorkflowLog[]
+}) => `
+  <p><a href="${escapeHtml(href)}">Click here to open the worklist item</a></p>
+  <p style="margin:0 0 12px;color:#789900;font-weight:700;">Philanthropy Membership Org</p>
+  <ol style="margin:0;padding-left:24px;">
+    <li>Name of Philanthropic Membership Organization: ${escapeHtml(organizationName)}</li>
+    <li>Your name and name of Internal Sponsor/Liaison if different: ${escapeHtml(requester)} / ${escapeHtml(sponsor)}</li>
+    <li>Amount of membership fee (Please note if the amount is different than last year): $${escapeHtml(amount.toFixed(2))}</li>
+    <li>Start and end date for membership: ${escapeHtml(startDate)} - ${escapeHtml(endDate)}</li>
+    <li>In a few sentences, please explain the value of this membership and to the work of others in the Foundation. (Include this information in the Purpose field in GMS when completing the request): ${escapeHtml(description)}</li>
+  </ol>
+  <br>
+  <p style="margin:0 0 4px;color:#789900;font-weight:700;">Process Information</p>
+  ${logs.length > 0 ? `<p style="margin:0;">Task Completed: ${escapeHtml(formatEmailDateTime(logs[logs.length - 1].ActivityDate))}, ${escapeHtml(logs[logs.length - 1].ActivityUser)}, ${escapeHtml(logs[logs.length - 1].ActivityAction)}</p>` : ''}
+  ${nextDestination ? `<p style="margin:0;">Next Destination: ${escapeHtml(nextDestination)}</p>` : ''}
+  <p style="margin:0 0 4px;">ID: ${escapeHtml(requestId)}</p>
+  <br>
+  <p style="margin:0 0 4px;color:#789900;font-weight:700;">Process Log</p>
+  <table style="width:100%;border-collapse:collapse;text-align:left;">
+    <tbody>
+      ${logs.map((log) => `<tr><td style="padding:1px 4px;">${escapeHtml(log.ActivityDate)}, ${escapeHtml(log.ActivityName)}, ${escapeHtml(log.ActivityUser)}, ${escapeHtml(log.ActivityAction)}, Notes: ${escapeHtml(log.NoteText ?? '')}</td></tr>`).join('')}
+    </tbody>
+  </table>
+`
+
+const getRequestWorkflowLogs = async (requestId: number, tableCodeId: number) => {
+  const result = await WorkflowLogService.getAll({
+    filter: `ProcInstID eq ${requestId}`,
+  })
+  if (!result.success) {
+    throw new Error(`The workflow log could not be loaded: ${result.error?.message ?? 'The WorkflowLog data source returned an error.'}`)
+  }
+  return result.data
+    .filter((log) => log.ProcInstID === requestId && log.TableCodeId === tableCodeId)
+    .sort((a, b) => (a.Id ?? 0) - (b.Id ?? 0))
+}
+
 function App() {
   const [organizations, setOrganizations] = useState<MembershipOrganization[]>([])
   const [requester, setRequester] = useState('')
+  const [signedInFullName, setSignedInFullName] = useState('')
   const [requesterEmail, setRequesterEmail] = useState('')
   const [selectedOrganizationId, setSelectedOrganizationId] = useState('')
   const [newOrganization, setNewOrganization] = useState('')
   const [sponsor, setSponsor] = useState('')
   const [amount, setAmount] = useState('')
+  const [approvalAction, setApprovalAction] = useState('Process')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [description, setDescription] = useState('')
@@ -87,13 +183,18 @@ function App() {
   const [organizationsLoaded, setOrganizationsLoaded] = useState(false)
   const [loadedRequestId, setLoadedRequestId] = useState('')
   const [notFoundRequestId, setNotFoundRequestId] = useState('')
+  const [requestAccessError, setRequestAccessError] = useState('')
+  const [homeNavigationError, setHomeNavigationError] = useState('')
+  const [isApprover, setIsApprover] = useState(false)
   const [savedRequest, setSavedRequest] = useState<PhilanthropyMembershipOrgRequest | null>(null)
   const [workflowLogs, setWorkflowLogs] = useState<Awaited<ReturnType<typeof WorkflowLogService.getAll>>['data']>([])
   const [loadedWorkflowRequestId, setLoadedWorkflowRequestId] = useState('')
 
   const isNewOrganization = selectedOrganizationId === 'new'
+  const isProcessed = workflowLogs[workflowLogs.length - 1]?.ActivityAction === 'Process'
   const isRequestLoading = Boolean(requestId && loadedRequestId !== requestId)
   const requestNotFound = Boolean(requestId && notFoundRequestId === requestId)
+  const requestAccessFailed = Boolean(requestId && loadedRequestId === requestId && requestAccessError)
   const isWorkflowLoading = Boolean(savedRequest && loadedWorkflowRequestId !== requestId)
   const isPageLoading = isSubmitting || !contextLoaded || !organizationsLoaded || isRequestLoading || isWorkflowLoading
 
@@ -126,6 +227,7 @@ function App() {
               throw new Error('The Office 365 Users profile did not include an email address.')
             }
             setRequester(name)
+            setSignedInFullName(name)
             setRequesterEmail(profileResult.data.mail)
           })
       })
@@ -172,12 +274,16 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!requestId || !organizationsLoaded) return
+    if (!requestId || !organizationsLoaded || !contextLoaded) return
 
     let active = true
 
     const loadRequest = async () => {
       try {
+        if (!requesterEmail) {
+          setRequestAccessError('The signed-in email is unavailable, so access to this request could not be verified.')
+          return
+        }
         if (!/^\d+$/.test(requestId)) {
           setNotFoundRequestId(requestId)
           return
@@ -190,6 +296,12 @@ function App() {
             'Id',
             'MembershipOrganizationId',
             'Requester',
+            'RequesterEmail',
+            'Approver',
+            'ApproverEmail',
+            'ApproverApproval',
+            'Return',
+            'Decline',
             'Amount',
             'StartDate',
             'EndDate',
@@ -204,9 +316,7 @@ function App() {
           if (status === 404) {
             setNotFoundRequestId(requestId)
           } else {
-            setPageError(
-              `The request could not be loaded: ${error?.message ?? 'The data source returned an error.'}`,
-            )
+            setRequestAccessError(`The request could not be loaded: ${error?.message ?? 'The data source returned an error.'}`)
           }
           return
         }
@@ -218,21 +328,53 @@ function App() {
           setNotFoundRequestId(requestId)
           return
         }
+        if (request.Decline) {
+          setNotFoundRequestId(requestId)
+          return
+        }
+
+        const approversResult = await EFMModuleApproveService.getAll({
+          select: ['GroupName', 'EmailToApprove'],
+        })
+        if (!approversResult.success) {
+          throw new Error(`The approver list could not be loaded: ${approversResult.error?.message ?? 'The data source returned an error.'}`)
+        }
+        const groupResult = await GroupDetailsService.getAll({
+          select: ['GroupName', 'MSGroupName', 'MSDistributionName'],
+        })
+        if (!groupResult.success) {
+          throw new Error(`The approver group could not be loaded: ${groupResult.error?.message ?? 'The data source returned an error.'}`)
+        }
+        const approverGroups = groupResult.data.filter(
+          (group) => group.MSDistributionName?.trim().toLowerCase() === request.ApproverEmail.trim().toLowerCase(),
+        )
+        const approverGroupNames = new Set(approverGroups.map((group) => group.GroupName.trim().toLowerCase()))
+        const isRequester = request.RequesterEmail.trim().toLowerCase() === requesterEmail.trim().toLowerCase()
+        const isAuthorizedApprover = approversResult.data.some(
+          (approver) =>
+            approverGroupNames.has(approver.GroupName.trim().toLowerCase()) &&
+            approver.EmailToApprove.trim().toLowerCase() === requesterEmail.trim().toLowerCase(),
+        )
+        if (!isRequester && !isAuthorizedApprover) {
+          setNotFoundRequestId(requestId)
+          return
+        }
 
         const organization = organizations.find(
           (item) => item.Id === request.MembershipOrganizationId,
         )
+        setIsApprover(!isRequester && isAuthorizedApprover)
         setSavedRequest(request)
         setRequester(request.Requester)
         setSelectedOrganizationId(String(request.MembershipOrganizationId))
         setSponsor(organization?.InternalSponsor ?? '')
-        setAmount(String(request.Amount))
+        setAmount(Number(request.Amount).toFixed(2))
         setStartDate(formatUsDate(request.StartDate))
         setEndDate(formatUsDate(request.EndDate))
         setDescription(request.Description ?? '')
       } catch (error) {
         if (active) {
-          setPageError(`The request could not be loaded: ${describeError(error, 'The data source is unavailable.')}`)
+          setRequestAccessError(`Access to this request could not be verified: ${describeError(error, 'The data source is unavailable.')}`)
         }
       } finally {
         if (active) setLoadedRequestId(requestId)
@@ -243,7 +385,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [organizations, organizationsLoaded, requestId])
+  }, [contextLoaded, organizations, organizationsLoaded, requestId, requesterEmail])
 
   useEffect(() => {
     if (!savedRequest || !requestId) return
@@ -321,6 +463,140 @@ function App() {
     confirmed = false,
   ) => {
     event?.preventDefault()
+    if (savedRequest) {
+      if (!isApprover) return
+      if (!confirmed) {
+        setPageError('')
+        setShowSubmitConfirmation(true)
+        return
+      }
+
+      setShowSubmitConfirmation(false)
+      setPageError('')
+      setIsSubmitting(true)
+      try {
+        const requestKey = savedRequest.Id
+        if (requestKey === undefined) {
+          throw new Error('The request ID is unavailable, so the approval could not be saved.')
+        }
+        const changes =
+          approvalAction === 'Process'
+            ? { ApproverApproval: true }
+            : approvalAction === 'Decline'
+              ? { Decline: true }
+              : { Return: true }
+        const updateResult = await PhilanthropyMembershipOrgRequestService.update(String(requestKey), changes)
+        if (!updateResult.success) {
+          throw new Error(`The approval action could not be saved: ${updateResult.error?.message ?? 'The data source returned an error.'}`)
+        }
+        setSavedRequest({ ...savedRequest, ...changes })
+
+        const approvalTimestamp = getIndiaDateTime(new Date())
+        let processLogError = ''
+        let notificationLogs = workflowLogs
+          .filter((log) => log.ProcInstID === requestKey)
+          .sort((a, b) => (a.Id ?? 0) - (b.Id ?? 0))
+        const tableCodeResult = await TableCodeService.getAll({
+          filter: "TableName eq 'PhilanthropyMembershipOrgRequest'",
+          top: 1,
+          select: ['TableCodeID', 'TableName'],
+        })
+        const tableCodeId = tableCodeResult.success
+          ? tableCodeResult.data.find(
+              (tableCode) => tableCode.TableName === 'PhilanthropyMembershipOrgRequest',
+            )?.TableCodeID
+          : undefined
+        if (!tableCodeResult.success) {
+          processLogError = `The workflow log could not be prepared: ${tableCodeResult.error?.message ?? 'The TableCode data source returned an error.'}`
+        } else if (tableCodeId === undefined) {
+          processLogError = 'No matching TableCode was found for the workflow log.'
+        }
+        if (approvalAction === 'Process') {
+          if (!signedInFullName && !processLogError) {
+            processLogError = 'Your signed-in name is unavailable, so the approval workflow log could not be created.'
+          }
+          if (!processLogError && tableCodeId !== undefined) {
+            const workflowResult = await WorkflowLogService.create({
+              ActivityDate: approvalTimestamp,
+              ActivityName: 'Approval',
+              ActivityUser: signedInFullName,
+              ActivityAction: 'Process',
+              ProcInstID: requestKey,
+              Status: 4,
+              StartDate: approvalTimestamp,
+              FinishDate: approvalTimestamp,
+              TableCodeId: tableCodeId,
+              NoteText: description.trim() || undefined,
+              StatusDescription: 'Process Complete',
+            })
+            if (!workflowResult.success) {
+              processLogError = `The workflow log could not be created: ${workflowResult.error?.message ?? 'The WorkflowLog data source returned an error.'}`
+            } else {
+              setWorkflowLogs((currentLogs) => [...currentLogs, workflowResult.data])
+            }
+          }
+        }
+        if (tableCodeId !== undefined) {
+          try {
+            notificationLogs = await getRequestWorkflowLogs(requestKey, tableCodeId)
+          } catch (error) {
+            processLogError = `The workflow log records could not be loaded: ${describeError(error, 'The WorkflowLog data source is unavailable.')}`
+          }
+        }
+
+        const organization = organizations.find(
+          (item) => item.Id === savedRequest.MembershipOrganizationId,
+        )
+        if (!organization) {
+          throw new Error('The request was updated, but its organization could not be loaded for the notification email.')
+        }
+        const navigationResult = await NavigationService.getAll({
+          select: ['Title', 'NavURL'],
+        })
+        if (!navigationResult.success) {
+          throw new Error(`The request was updated, but its email link could not be loaded: ${navigationResult.error?.message ?? 'The Navigation data source returned an error.'}`)
+        }
+        const destination = navigationResult.data.find(
+          (navigation) => navigation.Title === 'PhilanthropyMembership',
+        )?.NavURL
+        if (!destination) {
+          throw new Error('The request was updated, but no NavURL was found for PhilanthropyMembership.')
+        }
+        const url = new URL(destination, window.location.href)
+        url.searchParams.set('requestid', String(requestKey))
+        const emailBody = buildRequestEmailBody({
+          href: url.href,
+          organizationName: organization.MemberOrganization,
+          requester: savedRequest.Requester,
+          sponsor: organization.InternalSponsor ?? '',
+          amount: Number(savedRequest.Amount),
+          startDate: formatUsDate(savedRequest.StartDate),
+          endDate: formatUsDate(savedRequest.EndDate),
+          description: savedRequest.Description ?? '',
+          nextDestination: approvalAction === 'Return' ? savedRequest.Requester : undefined,
+          requestId: String(requestKey),
+          logs: notificationLogs.filter((log) => log.TableCodeId === tableCodeId),
+        })
+        const emailResult = await CaseyAdminFlowv1Service.Run({
+          email: savedRequest.RequesterEmail,
+          email_1: '',
+          text_1: 'Philanthropy Membership Org - Request',
+          text: emailBody,
+        })
+        if (!emailResult.success) {
+          throw new Error(`The request was updated, but the requester email could not be sent: ${emailResult.error?.message ?? 'Casey Admin Flow v1 returned an error.'}`)
+        }
+        if (processLogError) {
+          throw new Error(`The requester email was sent, but the approval workflow log failed: ${processLogError}`)
+        }
+      } catch (error) {
+        setPageError(describeError(error, 'The approval action could not be completed.'))
+      } finally {
+        setIsSubmitting(false)
+      }
+      return
+    }
+
     if (!confirmed) {
       const errors = validate()
       setFieldErrors(errors)
@@ -363,15 +639,44 @@ function App() {
         organizationId = Number(selectedOrganizationId)
       }
 
+      const distributionGroupName =
+        !isNewOrganization &&
+        Number(amount) === organizations.find((organization) => organization.Id === organizationId)?.Amount
+          ? 'PhilanthropyGroup2'
+          : 'PhilanthropyGroup1'
+      const groupDetailsResult = await GroupDetailsService.getAll({
+        filter: `MSGroupName eq '${distributionGroupName}'`,
+        top: 1,
+        select: ['GroupName', 'MSGroupName', 'MSDistributionName'],
+      })
+      if (!groupDetailsResult.success) {
+        throw new Error(
+          `The request could not be submitted because its approver and distribution email could not be loaded: ${groupDetailsResult.error?.message ?? 'The GroupDetails data source returned an error.'}`,
+        )
+      }
+      const selectedGroup = groupDetailsResult.data.find(
+        (group) => group.MSGroupName === distributionGroupName,
+      )
+      if (!selectedGroup?.GroupName) {
+        throw new Error(`The request could not be submitted because no approver was found for ${distributionGroupName}.`)
+      }
+      const distributionEmail = selectedGroup.MSDistributionName
+      if (!distributionEmail) {
+        throw new Error(`The request could not be submitted because no distribution email was found for ${distributionGroupName}.`)
+      }
+
       const requestTimestamp = getEasternDateTime(new Date())
       const requestResult = await PhilanthropyMembershipOrgRequestService.create({
         MembershipOrganizationId: organizationId,
         Requester: requester,
+        Approver: selectedGroup.GroupName,
+        ApproverEmail: distributionEmail,
         RequesterEmail: requesterEmail,
         RequestDate: requestTimestamp,
         Amount: Number(amount),
-        Return: 0,
-        Decline: 0,
+        Return: false,
+        Decline: false,
+        ApproverApproval: false,
         StartDate: parseUsDate(startDate),
         EndDate: parseUsDate(endDate),
         Description: description.trim() || undefined,
@@ -444,28 +749,6 @@ function App() {
         throw new Error('The request was saved, but no NavURL was found for PhilanthropyMembership.')
       }
 
-      const distributionGroupName =
-        !isNewOrganization &&
-        Number(amount) === organizations.find((organization) => organization.Id === organizationId)?.Amount
-          ? 'PhilanthropyGroup2'
-          : 'PhilanthropyGroup1'
-      const groupDetailsResult = await GroupDetailsService.getAll({
-        filter: `MSGroupName eq '${distributionGroupName}'`,
-        top: 1,
-        select: ['MSGroupName', 'MSDistributionName'],
-      })
-      if (!groupDetailsResult.success) {
-        throw new Error(
-          `The request was saved, but its distribution email could not be loaded: ${groupDetailsResult.error?.message ?? 'The GroupDetails data source returned an error.'}`,
-        )
-      }
-      const distributionEmail = groupDetailsResult.data.find(
-        (group) => group.MSGroupName === distributionGroupName,
-      )?.MSDistributionName
-      if (!distributionEmail) {
-        throw new Error(`The request was saved, but no distribution email was found for ${distributionGroupName}.`)
-      }
-
       const createdRequestId = String(requestResult.data.Id)
       const url = new URL(destination, window.location.href)
       url.searchParams.set('requestid', createdRequestId)
@@ -475,39 +758,39 @@ function App() {
       if (!organizationName) {
         throw new Error('The request was saved, but the selected organization name could not be determined.')
       }
-      const emailBody = [
-        'Philanthropy Membership Org',
-        '',
-        `1. Name of Philanthropic Membership Organization: ${organizationName}`,
-        `2. Your name and name of Internal Sponsor/Liaison if different: ${requester} / ${sponsor.trim()}`,
-        `3. Amount of membership fee (Please note if the amount is different than last year): ${amount}`,
-        `4. Start and end date for membership: ${startDate} - ${endDate}`,
-        `5. In a few sentences, please explain the value of this membership and to the work of others in the Foundation. (Include this information in the Purpose field in GMS when completing the request): ${description.trim()}`,
-        '',
-        `Link to the eForm request: ${url.href}`,
-      ].join('\n')
+      const requestWorkflowLogs = await getRequestWorkflowLogs(requestResult.data.Id, tableCodeId)
+      const emailBody = buildRequestEmailBody({
+        href: url.href,
+        organizationName,
+        requester,
+        sponsor: sponsor.trim(),
+        amount: Number(amount),
+        startDate,
+        endDate,
+        description: description.trim(),
+        nextDestination: selectedGroup.GroupName,
+        requestId: createdRequestId,
+        logs: requestWorkflowLogs,
+      })
       const emailInput = {
         text_1: 'Philanthropy Membership Org - Request',
         text: emailBody,
         email_1: '',
       }
-      const requesterEmailResult = await CaseyAdminFlowv1Service.Run({
-        ...emailInput,
-        email: requesterEmail,
-      })
-      if (!requesterEmailResult.success) {
-        throw new Error(
-          `The request was saved, but the requester email could not be sent: ${requesterEmailResult.error?.message ?? 'Casey Admin Flow v1 returned an error.'}`,
-        )
-      }
-      const distributionEmailResult = await CaseyAdminFlowv1Service.Run({
-        ...emailInput,
-        email: distributionEmail,
-      })
-      if (!distributionEmailResult.success) {
-        throw new Error(
-          `The request was saved, but the distribution email could not be sent: ${distributionEmailResult.error?.message ?? 'Casey Admin Flow v1 returned an error.'}`,
-        )
+      const [requesterEmailResult, distributionEmailResult] = await Promise.all([
+        CaseyAdminFlowv1Service.Run({ ...emailInput, email: requesterEmail }),
+        CaseyAdminFlowv1Service.Run({ ...emailInput, email: distributionEmail }),
+      ])
+      const emailErrors = [
+        requesterEmailResult.success
+          ? null
+          : `requester (${requesterEmail}): ${requesterEmailResult.error?.message ?? 'Casey Admin Flow v1 returned an error.'}`,
+        distributionEmailResult.success
+          ? null
+          : `distribution group (${distributionEmail}): ${distributionEmailResult.error?.message ?? 'Casey Admin Flow v1 returned an error.'}`,
+      ].filter((error): error is string => error !== null)
+      if (emailErrors.length > 0) {
+        throw new Error(`The request was saved, but email delivery failed for ${emailErrors.join('; ')}.`)
       }
 
       setRequestId(createdRequestId)
@@ -521,6 +804,7 @@ function App() {
 
   const handleClose = async () => {
     setPageError('')
+    setHomeNavigationError('')
     setIsClosing(true)
     try {
       const result = await NavigationService.getAll({
@@ -539,9 +823,9 @@ function App() {
       }
       window.location.assign(destination)
     } catch (error) {
-      setPageError(
-        `The HR page could not be opened: ${describeError(error, 'The Navigation data source is unavailable.')}`,
-      )
+      const message = `The HR page could not be opened: ${describeError(error, 'The Navigation data source is unavailable.')}`
+      setPageError(message)
+      setHomeNavigationError(message)
     } finally {
       setIsClosing(false)
     }
@@ -562,10 +846,25 @@ function App() {
 
   if (requestNotFound) {
     return (
-      <main className="page-shell">
+      <main className="not-found-backdrop">
+        <section className="form-panel not-found-panel" role="dialog" aria-modal="true" aria-labelledby="not-found-heading">
+          <h1 id="not-found-heading">404 - Request Not Found</h1>
+          <p>The requested form does not exist or has been deleted.</p>
+          <a href="#" onClick={(event) => { event.preventDefault(); void handleClose() }}>Home</a>
+          {homeNavigationError && <p className="page-error" role="alert">{homeNavigationError}</p>}
+        </section>
+      </main>
+    )
+  }
+
+  if (requestAccessFailed) {
+    return (
+      <main className="not-found-backdrop">
         <section className="form-panel not-found-panel" role="alert">
           <h1>404 - Request Not Found</h1>
-          <p>The requested form does not exist or has been deleted.</p>
+          <p>{requestAccessError}</p>
+          <a href="#" onClick={(event) => { event.preventDefault(); void handleClose() }}>Home</a>
+          {homeNavigationError && <p className="page-error" role="alert">{homeNavigationError}</p>}
         </section>
       </main>
     )
@@ -579,7 +878,15 @@ function App() {
           src="/aecf-logo.png"
           alt="The Annie E. Casey Foundation"
         />
-        <h1>Philanthropy Membership - Request</h1>
+        <h1>
+          {isProcessed
+            ? 'Philanthropy Membership - Processed'
+            : savedRequest?.Return
+              ? 'Philanthropy Membership - Return'
+              : savedRequest
+                ? 'Philanthropy Membership - Approval'
+                : 'Philanthropy Membership - Request'}
+        </h1>
         <nav className="header-nav" aria-label="Main navigation">
           <button type="button" onClick={() => setShowNavigationConfirmation(true)}>
             eForms
@@ -617,7 +924,7 @@ function App() {
                     )
                     setSelectedOrganizationId(organizationId)
                     setSponsor(organization?.InternalSponsor ?? '')
-                    setAmount(organization ? String(organization.Amount) : '')
+                    setAmount(organization ? Number(organization.Amount).toFixed(2) : '')
                   }}
                   aria-invalid={Boolean(fieldErrors.organization)}
                   aria-describedby={fieldErrors.organization ? 'organization-error' : undefined}
@@ -680,13 +987,16 @@ function App() {
               </label>
               <input
                 id="amount"
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
                 inputMode="decimal"
                 disabled={Boolean(savedRequest)}
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
+                onBlur={() => {
+                  if (amount.trim() && /^\d+(\.\d{1,2})?$/.test(amount)) {
+                    setAmount(Number(amount).toFixed(2))
+                  }
+                }}
                 aria-invalid={Boolean(fieldErrors.amount)}
                 aria-describedby={fieldErrors.amount ? 'amount-error' : 'amount-note'}
               />
@@ -781,13 +1091,13 @@ function App() {
         </section>
 
         <section className="form-panel" aria-labelledby="description-heading">
-          <h2 id="description-heading">Description</h2>
+          <h2 id="description-heading">Notes</h2>
           <label className="visually-hidden" htmlFor="description">Description</label>
           <input
             id="description"
             type="text"
             maxLength={250}
-            disabled={Boolean(savedRequest)}
+            disabled={isProcessed}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
@@ -796,18 +1106,40 @@ function App() {
         <section className="form-panel form-actions">
           <p>Please click <strong>Submit</strong> when you are ready to submit this form.</p>
           {pageError && <p className="page-error" role="alert">{pageError}</p>}
-          <div className="button-row">
-            <button type="submit" disabled={isSubmitting || !requester || !requesterEmail || Boolean(savedRequest)}>
-              Submit
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={handleClose}
-              disabled={isClosing}
-            >
-              {isClosing ? 'Closing…' : 'Close'}
-            </button>
+          <div className="action-row">
+            {savedRequest && isApprover && !isProcessed && (
+              <div className="approval-action">
+                <label className="field-label" htmlFor="approval-action">Action</label>
+                <select
+                  id="approval-action"
+                  value={approvalAction}
+                  onChange={(event) => setApprovalAction(event.target.value)}
+                  disabled={isSubmitting}
+                >
+                  <option value="Process">Process</option>
+                  <option value="Decline">Decline</option>
+                  <option value="Return">Return</option>
+                </select>
+              </div>
+            )}
+            <div className="button-row">
+              {(!savedRequest || (isApprover && !isProcessed)) && (
+                <button
+                  type="submit"
+                  disabled={isSubmitting || (!savedRequest && (!requester || !requesterEmail))}
+                >
+                  Submit
+                </button>
+              )}
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={handleClose}
+                disabled={isClosing}
+              >
+                {isClosing ? 'Closing…' : 'Close'}
+              </button>
+            </div>
           </div>
         </section>
       </form>
@@ -856,7 +1188,9 @@ function App() {
             aria-labelledby="submit-confirmation-message"
           >
             <p id="submit-confirmation-message">
-              Please confirm if you are ready to submit the eForm.
+              {savedRequest
+                ? `Please confirm the ${approvalAction.toLowerCase()} action for this request.`
+                : 'Please confirm if you are ready to submit the eForm.'}
             </p>
             <div className="confirmation-actions">
               <button

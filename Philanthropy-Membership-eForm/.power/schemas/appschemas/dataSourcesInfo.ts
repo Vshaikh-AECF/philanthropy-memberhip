@@ -42,6 +42,13 @@ export const dataSourcesInfo = {
       }
     }
   },
+  "efmmoduleapprove": {
+    "tableId": "[dbo].[EFMModuleApprove]",
+    "version": "v2",
+    "primaryKey": "EmailToApprove",
+    "dataSourceType": "Connector",
+    "apis": {}
+  },
   "groupdetails": {
     "tableId": "[dbo].[GroupDetails]",
     "version": "v2",
