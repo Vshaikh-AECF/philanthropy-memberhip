@@ -140,7 +140,7 @@ const buildRequestEmailBody = ({
   <p style="margin:0 0 4px;color:#789900;font-weight:700;">Process Log</p>
   <table style="width:100%;border-collapse:collapse;text-align:left;">
     <tbody>
-      ${logs.map((log) => `<tr><td style="padding:1px 4px;">${escapeHtml(log.ActivityDate)}, ${escapeHtml(log.ActivityName)}, ${escapeHtml(log.ActivityUser)}, ${escapeHtml(log.ActivityAction)}, Notes: ${escapeHtml(log.NoteText ?? '')}</td></tr>`).join('')}
+      ${logs.map((log) => `<tr><td style="padding:1px 4px;">${escapeHtml(formatEmailDateTime(log.ActivityDate))}, ${escapeHtml(log.ActivityName)}, ${escapeHtml(log.ActivityUser)}, ${escapeHtml(log.ActivityAction)}, Notes: ${escapeHtml(log.NoteText ?? '')}</td></tr>`).join('')}
     </tbody>
   </table>
 `
@@ -169,6 +169,7 @@ function App() {
   const [approvalAction, setApprovalAction] = useState('Process')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [membershipDescription, setMembershipDescription] = useState('')
   const [description, setDescription] = useState('')
   const [requestId, setRequestId] = useState(
     new URLSearchParams(window.location.search).get('requestid') ?? '',
@@ -371,6 +372,7 @@ function App() {
         setAmount(Number(request.Amount).toFixed(2))
         setStartDate(formatUsDate(request.StartDate))
         setEndDate(formatUsDate(request.EndDate))
+        setMembershipDescription(organization?.Description ?? '')
         setDescription(request.Description ?? '')
       } catch (error) {
         if (active) {
@@ -572,7 +574,7 @@ function App() {
           amount: Number(savedRequest.Amount),
           startDate: formatUsDate(savedRequest.StartDate),
           endDate: formatUsDate(savedRequest.EndDate),
-          description: savedRequest.Description ?? '',
+          description: organization.Description ?? '',
           nextDestination: approvalAction === 'Return' ? savedRequest.Requester : undefined,
           requestId: String(requestKey),
           logs: notificationLogs.filter((log) => log.TableCodeId === tableCodeId),
@@ -625,6 +627,7 @@ function App() {
           MemberOrganization: newOrganization.trim(),
           InternalSponsor: sponsor.trim(),
           Amount: Number(amount),
+          Description: membershipDescription.trim() || undefined,
         })
         if (!organizationResult.success) {
           throw new Error(
@@ -767,7 +770,7 @@ function App() {
         amount: Number(amount),
         startDate,
         endDate,
-        description: description.trim(),
+        description: membershipDescription.trim(),
         nextDestination: selectedGroup.GroupName,
         requestId: createdRequestId,
         logs: requestWorkflowLogs,
@@ -925,6 +928,7 @@ function App() {
                     setSelectedOrganizationId(organizationId)
                     setSponsor(organization?.InternalSponsor ?? '')
                     setAmount(organization ? Number(organization.Amount).toFixed(2) : '')
+                    setMembershipDescription(organization?.Description ?? '')
                   }}
                   aria-invalid={Boolean(fieldErrors.organization)}
                   aria-describedby={fieldErrors.organization ? 'organization-error' : undefined}
@@ -1088,6 +1092,22 @@ function App() {
               )}
             </div>
           </div>
+        </section>
+
+        <section className="form-panel" aria-labelledby="membership-description-heading">
+          <h2 id="membership-description-heading">
+            In a few sentences, please explain the value of this membership and to the work of others in the Foundation.
+          </h2>
+          <label className="visually-hidden" htmlFor="membership-description">
+            Membership value and impact
+          </label>
+          <input
+            id="membership-description"
+            type="text"
+            value={membershipDescription}
+            disabled={!isNewOrganization}
+            onChange={(event) => setMembershipDescription(event.target.value)}
+          />
         </section>
 
         <section className="form-panel" aria-labelledby="description-heading">
