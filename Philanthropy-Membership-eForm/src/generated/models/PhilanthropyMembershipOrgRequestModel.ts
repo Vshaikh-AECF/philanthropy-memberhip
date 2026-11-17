@@ -7,11 +7,7 @@ export interface PhilanthropyMembershipOrgRequest {
   Id?: number;
   MembershipOrganizationId: number;
   Requester: string;
-  Approver: string;
-  ApproverEmail: string;
   Amount: number;
-  Return?: number;
-  Decline?: number;
   StartDate: string;
   EndDate: string;
   Description?: string;
@@ -24,4 +20,9 @@ export interface PhilanthropyMembershipOrgRequest {
   DeletedBy?: string | null;
   RequesterEmail: string;
   RequestDate: string;
+  Return: boolean;
+  Decline: boolean;
+  Approver: string;
+  ApproverEmail: string;
+  ApproverApproval: boolean;
 }
