@@ -350,6 +350,11 @@
   line-height: 1;
 }
 
+.notes-error {
+  display: block;
+  margin-top: 5px;
+}
+
 .field-error.amount-error,
 .field-error.new-organization-error,
 .field-error.date-error,

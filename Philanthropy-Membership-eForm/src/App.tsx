@@ -157,6 +157,24 @@ const getRequestWorkflowLogs = async (requestId: number, tableCodeId: number) =>
     .sort((a, b) => (a.Id ?? 0) - (b.Id ?? 0))
 }
 
+const getRequestTableCodeId = async () => {
+  const result = await TableCodeService.getAll({
+    filter: "TableName eq 'PhilanthropyMembershipOrgRequest'",
+    top: 1,
+    select: ['TableCodeID', 'TableName'],
+  })
+  if (!result.success) {
+    throw new Error(result.error?.message ?? 'The TableCode data source returned an error.')
+  }
+  const tableCodeId = result.data.find(
+    (tableCode) => tableCode.TableName === 'PhilanthropyMembershipOrgRequest',
+  )?.TableCodeID
+  if (tableCodeId === undefined) {
+    throw new Error('No matching TableCode was found for PhilanthropyMembershipOrgRequest.')
+  }
+  return tableCodeId
+}
+
 function App() {
   const [organizations, setOrganizations] = useState<MembershipOrganization[]>([])
   const [requester, setRequester] = useState('')
@@ -175,6 +193,7 @@ function App() {
     new URLSearchParams(window.location.search).get('requestid') ?? '',
   )
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [notesError, setNotesError] = useState('')
   const [pageError, setPageError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
@@ -192,6 +211,11 @@ function App() {
   const [loadedWorkflowRequestId, setLoadedWorkflowRequestId] = useState('')
 
   const isNewOrganization = selectedOrganizationId === 'new'
+  const isReturnedRequester = Boolean(
+    savedRequest?.Return &&
+    savedRequest.RequesterEmail.trim().toLowerCase() === requesterEmail.trim().toLowerCase(),
+  )
+  const isDeclined = Boolean(savedRequest?.Decline)
   const isProcessed = workflowLogs[workflowLogs.length - 1]?.ActivityAction === 'Process'
   const isRequestLoading = Boolean(requestId && loadedRequestId !== requestId)
   const requestNotFound = Boolean(requestId && notFoundRequestId === requestId)
@@ -329,11 +353,6 @@ function App() {
           setNotFoundRequestId(requestId)
           return
         }
-        if (request.Decline) {
-          setNotFoundRequestId(requestId)
-          return
-        }
-
         const approversResult = await EFMModuleApproveService.getAll({
           select: ['GroupName', 'EmailToApprove'],
         })
@@ -373,7 +392,6 @@ function App() {
         setStartDate(formatUsDate(request.StartDate))
         setEndDate(formatUsDate(request.EndDate))
         setMembershipDescription(organization?.Description ?? '')
-        setDescription(request.Description ?? '')
       } catch (error) {
         if (active) {
           setRequestAccessError(`Access to this request could not be verified: ${describeError(error, 'The data source is unavailable.')}`)
@@ -393,28 +411,20 @@ function App() {
     if (!savedRequest || !requestId) return
 
     let active = true
-    void WorkflowLogService.getAll({
-      filter: `ProcInstID eq ${Number(requestId)}`,
-      orderBy: ['ActivityDate'],
-    })
-      .then((result) => {
+    void (async () => {
+      try {
+        const requestLogs = await getRequestWorkflowLogs(Number(requestId), await getRequestTableCodeId())
         if (!active) return
-        if (!result.success) {
-          setPageError(
-            `The workflow log could not be loaded: ${result.error?.message ?? 'The data source returned an error.'}`,
-          )
-          return
-        }
-        setWorkflowLogs(result.data)
-      })
-      .catch((error: unknown) => {
+        setWorkflowLogs(requestLogs)
+        setDescription(requestLogs[requestLogs.length - 1]?.NoteText ?? '')
+      } catch (error) {
         if (active) {
           setPageError(`The workflow log could not be loaded: ${describeError(error, 'The data source is unavailable.')}`)
         }
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoadedWorkflowRequestId(requestId)
-      })
+      }
+    })()
 
     return () => {
       active = false
@@ -466,8 +476,22 @@ function App() {
   ) => {
     event?.preventDefault()
     if (savedRequest) {
-      if (!isApprover) return
+      if (!isApprover && !isReturnedRequester) return
+      if (isApprover && approvalAction !== 'Process' && !description.trim()) {
+        setNotesError('Notes is required')
+        return
+      }
+      setNotesError('')
       if (!confirmed) {
+        if (isReturnedRequester) {
+          const errors = validate()
+          setFieldErrors(errors)
+          if (Object.keys(errors).length > 0) return
+        }
+        if (isReturnedRequester && !requesterEmail) {
+          setPageError('Your signed-in email is unavailable. The request was not submitted.')
+          return
+        }
         setPageError('')
         setShowSubmitConfirmation(true)
         return
@@ -480,6 +504,132 @@ function App() {
         const requestKey = savedRequest.Id
         if (requestKey === undefined) {
           throw new Error('The request ID is unavailable, so the approval could not be saved.')
+        }
+        if (isReturnedRequester) {
+          if (!requester || !requesterEmail) {
+            throw new Error('Your signed-in name or email is unavailable. The request was not submitted.')
+          }
+          let resubmissionOrganizationId = Number(selectedOrganizationId)
+          if (isNewOrganization) {
+            const organizationResult = await MembershipOrganizationService.create({
+              MemberOrganization: newOrganization.trim(),
+              InternalSponsor: sponsor.trim(),
+              Amount: Number(amount),
+              Description: membershipDescription.trim() || undefined,
+            })
+            if (!organizationResult.success || organizationResult.data.Id === undefined) {
+              throw new Error(`The new organization could not be saved: ${organizationResult.error?.message ?? 'The data source did not return an ID.'}`)
+            }
+            resubmissionOrganizationId = organizationResult.data.Id
+          }
+          const resubmissionTimestamp = getEasternDateTime(new Date())
+          const updateResult = await PhilanthropyMembershipOrgRequestService.update(String(requestKey), {
+            MembershipOrganizationId: resubmissionOrganizationId,
+            Amount: Number(amount),
+            StartDate: parseUsDate(startDate),
+            EndDate: parseUsDate(endDate),
+            Description: description.trim() || undefined,
+            Return: false,
+            UpdateAt: resubmissionTimestamp,
+            UpdatedBy: requester,
+          })
+          if (!updateResult.success) {
+            throw new Error(`The returned request could not be resubmitted: ${updateResult.error?.message ?? 'The data source returned an error.'}`)
+          }
+          const tableCodeResult = await TableCodeService.getAll({
+            filter: "TableName eq 'PhilanthropyMembershipOrgRequest'",
+            top: 1,
+            select: ['TableCodeID', 'TableName'],
+          })
+          if (!tableCodeResult.success) {
+            throw new Error(`The request was updated, but its workflow log could not be prepared: ${tableCodeResult.error?.message ?? 'The TableCode data source returned an error.'}`)
+          }
+          const tableCodeId = tableCodeResult.data.find(
+            (tableCode) => tableCode.TableName === 'PhilanthropyMembershipOrgRequest',
+          )?.TableCodeID
+          if (tableCodeId === undefined) {
+            throw new Error('The request was updated, but no matching TableCode was found for its workflow log.')
+          }
+          const workflowTimestamp = getEasternDateTime(new Date())
+          const workflowResult = await WorkflowLogService.create({
+            ActivityDate: workflowTimestamp,
+            ActivityName: 'Request',
+            ActivityUser: requester,
+            ActivityAction: 'Resubmit',
+            ProcInstID: requestKey,
+            Status: 4,
+            StartDate: workflowTimestamp,
+            FinishDate: workflowTimestamp,
+            TableCodeId: tableCodeId,
+            NoteText: description.trim() || undefined,
+            StatusDescription: `Waiting for ${savedRequest.Approver}`,
+          })
+          if (!workflowResult.success) {
+            throw new Error(`The request was updated, but its workflow log could not be created: ${workflowResult.error?.message ?? 'The WorkflowLog data source returned an error.'}`)
+          }
+          const organization = isNewOrganization
+            ? {
+                MemberOrganization: newOrganization.trim(),
+                InternalSponsor: sponsor.trim(),
+                Description: membershipDescription.trim(),
+              }
+            : organizations.find((item) => item.Id === resubmissionOrganizationId)
+          if (!organization) {
+            throw new Error('The request was resubmitted, but its organization could not be loaded for the notification email.')
+          }
+          const [navigationResult, resubmissionLogs] = await Promise.all([
+            NavigationService.getAll({ select: ['Title', 'NavURL'] }),
+            getRequestWorkflowLogs(requestKey, tableCodeId),
+          ])
+          if (!navigationResult.success) {
+            throw new Error(`The request was resubmitted, but its email link could not be loaded: ${navigationResult.error?.message ?? 'The Navigation data source returned an error.'}`)
+          }
+          const destination = navigationResult.data.find(
+            (navigation) => navigation.Title === 'PhilanthropyMembership',
+          )?.NavURL
+          if (!destination) {
+            throw new Error('The request was resubmitted, but no NavURL was found for PhilanthropyMembership.')
+          }
+          const url = new URL(destination, window.location.href)
+          url.searchParams.set('requestid', String(requestKey))
+          const emailBody = buildRequestEmailBody({
+            href: url.href,
+            organizationName: organization.MemberOrganization,
+            requester,
+            sponsor: organization.InternalSponsor,
+            amount: Number(amount),
+            startDate,
+            endDate,
+            description: organization.Description ?? '',
+            nextDestination: savedRequest.Approver,
+            requestId: String(requestKey),
+            logs: resubmissionLogs,
+          })
+          const emailResults = await Promise.all([
+            CaseyAdminFlowv1Service.Run({
+              email: requesterEmail,
+              email_1: '',
+              text_1: 'Philanthropy Membership Org - Request',
+              text: emailBody,
+            }),
+            CaseyAdminFlowv1Service.Run({
+              email: savedRequest.ApproverEmail,
+              email_1: '',
+              text_1: 'Philanthropy Membership Org - Request',
+              text: emailBody,
+            }),
+          ])
+          const emailErrors = emailResults.flatMap((result, index) =>
+            result.success
+              ? []
+              : [`${index === 0 ? 'requester' : 'approver'}: ${result.error?.message ?? 'Casey Admin Flow v1 returned an error.'}`],
+          )
+          if (emailErrors.length) {
+            throw new Error(`The request was resubmitted, but email delivery failed for ${emailErrors.join('; ')}.`)
+          }
+          setSavedRequest({ ...savedRequest, MembershipOrganizationId: resubmissionOrganizationId, Amount: Number(amount), StartDate: parseUsDate(startDate), EndDate: parseUsDate(endDate), Description: description.trim() || undefined, Return: false })
+          setWorkflowLogs((currentLogs) => [...currentLogs, workflowResult.data])
+          return
         }
         const changes =
           approvalAction === 'Process'
@@ -513,7 +663,7 @@ function App() {
         } else if (tableCodeId === undefined) {
           processLogError = 'No matching TableCode was found for the workflow log.'
         }
-        if (approvalAction === 'Process') {
+        {
           if (!signedInFullName && !processLogError) {
             processLogError = 'Your signed-in name is unavailable, so the approval workflow log could not be created.'
           }
@@ -522,19 +672,26 @@ function App() {
               ActivityDate: approvalTimestamp,
               ActivityName: 'Approval',
               ActivityUser: signedInFullName,
-              ActivityAction: 'Process',
+              ActivityAction: approvalAction,
               ProcInstID: requestKey,
               Status: 4,
               StartDate: approvalTimestamp,
               FinishDate: approvalTimestamp,
               TableCodeId: tableCodeId,
               NoteText: description.trim() || undefined,
-              StatusDescription: 'Process Complete',
+              StatusDescription: approvalAction === 'Process'
+                ? 'Process Complete'
+                : approvalAction === 'Decline'
+                  ? `Declined by ${signedInFullName}`
+                  : `Returned by ${signedInFullName}`,
             })
             if (!workflowResult.success) {
               processLogError = `The workflow log could not be created: ${workflowResult.error?.message ?? 'The WorkflowLog data source returned an error.'}`
             } else {
               setWorkflowLogs((currentLogs) => [...currentLogs, workflowResult.data])
+              if (approvalAction === 'Return') {
+                setDescription(workflowResult.data.NoteText ?? '')
+              }
             }
           }
         }
@@ -579,10 +736,13 @@ function App() {
           requestId: String(requestKey),
           logs: notificationLogs.filter((log) => log.TableCodeId === tableCodeId),
         })
+        const emailSubject = approvalAction === 'Decline' || approvalAction === 'Return'
+          ? `Philanthropy Membership Org | ${approvalAction === 'Decline' ? 'Declined' : 'Returned'} by ${signedInFullName}`
+          : 'Philanthropy Membership Org - Request'
         const emailResult = await CaseyAdminFlowv1Service.Run({
           email: savedRequest.RequesterEmail,
           email_1: '',
-          text_1: 'Philanthropy Membership Org - Request',
+          text_1: emailSubject,
           text: emailBody,
         })
         if (!emailResult.success) {
@@ -882,7 +1042,9 @@ function App() {
           alt="The Annie E. Casey Foundation"
         />
         <h1>
-          {isProcessed
+          {isDeclined
+            ? 'Philanthropy Membership - Declined'
+            : isProcessed
             ? 'Philanthropy Membership - Processed'
             : savedRequest?.Return
               ? 'Philanthropy Membership - Return'
@@ -918,7 +1080,7 @@ function App() {
               <div className="organization-controls">
                 <select
                   id="organization"
-                  disabled={Boolean(savedRequest)}
+                  disabled={Boolean(savedRequest) && !isReturnedRequester}
                   value={selectedOrganizationId}
                   onChange={(event) => {
                     const organizationId = event.target.value
@@ -946,7 +1108,7 @@ function App() {
                     className="new-organization-input"
                     aria-label="New Organization Name"
                     placeholder="New Organization Name"
-                    disabled={Boolean(savedRequest)}
+                    disabled={Boolean(savedRequest) && !isReturnedRequester}
                     value={newOrganization}
                     onChange={(event) => setNewOrganization(event.target.value)}
                     aria-invalid={Boolean(fieldErrors.newOrganization)}
@@ -970,7 +1132,7 @@ function App() {
               </label>
               <input
                 id="sponsor"
-                disabled={Boolean(savedRequest)}
+                disabled={Boolean(savedRequest) && !isReturnedRequester}
                 value={sponsor}
                 onChange={(event) => setSponsor(event.target.value)}
                 aria-invalid={Boolean(fieldErrors.sponsor)}
@@ -993,7 +1155,7 @@ function App() {
                 id="amount"
                 type="text"
                 inputMode="decimal"
-                disabled={Boolean(savedRequest)}
+                disabled={Boolean(savedRequest) && !isReturnedRequester}
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
                 onBlur={() => {
@@ -1029,7 +1191,7 @@ function App() {
                   inputMode="numeric"
                   placeholder="Start Date"
                   maxLength={10}
-                  disabled={Boolean(savedRequest)}
+                  disabled={Boolean(savedRequest) && !isReturnedRequester}
                   value={startDate}
                   onChange={(event) => setStartDate(event.target.value)}
                   aria-invalid={Boolean(fieldErrors.startDate)}
@@ -1044,7 +1206,7 @@ function App() {
                     type="date"
                     lang="en-US"
                     value={parseUsDate(startDate)}
-                    disabled={Boolean(savedRequest)}
+                    disabled={Boolean(savedRequest) && !isReturnedRequester}
                     onChange={(event) => setStartDate(event.target.value ? formatUsDate(event.target.value) : '')}
                     aria-label="Choose start date"
                   />
@@ -1066,7 +1228,7 @@ function App() {
                   inputMode="numeric"
                   placeholder="End Date"
                   maxLength={10}
-                  disabled={Boolean(savedRequest)}
+                  disabled={Boolean(savedRequest) && !isReturnedRequester}
                   value={endDate}
                   onChange={(event) => setEndDate(event.target.value)}
                   aria-invalid={Boolean(fieldErrors.endDate)}
@@ -1081,7 +1243,7 @@ function App() {
                     type="date"
                     lang="en-US"
                     value={parseUsDate(endDate)}
-                    disabled={Boolean(savedRequest)}
+                    disabled={Boolean(savedRequest) && !isReturnedRequester}
                     onChange={(event) => setEndDate(event.target.value ? formatUsDate(event.target.value) : '')}
                     aria-label="Choose end date"
                   />
@@ -1117,17 +1279,21 @@ function App() {
             id="description"
             type="text"
             maxLength={250}
-            disabled={isProcessed}
+            disabled={isProcessed || isDeclined || (Boolean(savedRequest) && !isApprover && !isReturnedRequester)}
             value={description}
-            onChange={(event) => setDescription(event.target.value)}
+            onChange={(event) => {
+              setDescription(event.target.value)
+              if (event.target.value.trim()) setNotesError('')
+            }}
           />
+          {notesError && <span className="field-error notes-error" role="alert">{notesError}</span>}
         </section>
 
         <section className="form-panel form-actions">
           <p>Please click <strong>Submit</strong> when you are ready to submit this form.</p>
           {pageError && <p className="page-error" role="alert">{pageError}</p>}
           <div className="action-row">
-            {savedRequest && isApprover && !isProcessed && (
+            {savedRequest && isApprover && !isProcessed && !isDeclined && !savedRequest.Return && (
               <div className="approval-action">
                 <label className="field-label" htmlFor="approval-action">Action</label>
                 <select
@@ -1143,7 +1309,7 @@ function App() {
               </div>
             )}
             <div className="button-row">
-              {(!savedRequest || (isApprover && !isProcessed)) && (
+              {(!savedRequest || (isApprover && !isProcessed && !isDeclined && !savedRequest.Return) || (isReturnedRequester && !isDeclined)) && (
                 <button
                   type="submit"
                   disabled={isSubmitting || (!savedRequest && (!requester || !requesterEmail))}
@@ -1187,7 +1353,7 @@ function App() {
                       hour: 'numeric',
                       minute: '2-digit',
                       hourCycle: 'h23',
-                    })}</td>
+                    }).replace(',', '')}</td>
                     <td>{log.ActivityName}</td>
                     <td>{log.ActivityUser}</td>
                     <td>{log.ActivityAction}</td>
