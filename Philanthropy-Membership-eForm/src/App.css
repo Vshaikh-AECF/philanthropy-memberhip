@@ -9,6 +9,7 @@
   padding: 8px 12px;
   border-radius: 6px;
   background: #f7efd3;
+  box-shadow: 0 2px 4px rgb(41 34 20 / 12%);
   color: #17244a;
   font-size: 0.85rem;
   text-align: right;
@@ -69,7 +70,7 @@
   background: #f7efd3;
   border: 1px solid #eee6d0;
   border-radius: 7px;
-  box-shadow: 0 2px 4px rgb(41 34 20 / 16%);
+  box-shadow: 0 2px 4px rgb(41 34 20 / 12%);
 }
 
 .workflow-panel {
@@ -195,7 +196,7 @@
   width: min(220px, 42vw);
   min-height: 34px;
   padding: 4px 8px;
-  border: 1px solid #dedede;
+  border: 1px solid transparent;
   border-radius: 4px;
   background: #fff;
   color: #222;
@@ -278,7 +279,7 @@
   min-width: 0;
   min-height: 34px;
   padding: 6px 9px;
-  border: 1px solid #dedede;
+  border: 1px solid transparent;
   border-radius: 4px;
   background-color: #fff;
   color: #222;
@@ -386,7 +387,7 @@
   min-width: 0;
   min-height: 38px;
   overflow: hidden;
-  border: 1px solid #dedede;
+  border: 1px solid transparent;
   border-radius: 6px;
   background: #fff;
 }
@@ -480,8 +481,9 @@
   border-radius: 9px;
   background: #c95d00;
   color: #fff;
-  font-size: 1rem;
+  font-size: calc(1rem + 1px);
   font-weight: 700;
+  letter-spacing: 0.3px;
   line-height: 1.2;
   cursor: pointer;
 }

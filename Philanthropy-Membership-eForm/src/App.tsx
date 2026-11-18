@@ -27,6 +27,21 @@ type FieldErrors = Partial<Record<FieldName, string>>
 const describeError = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback
 
+const getApplicationVersion = async () => {
+  if (!import.meta.env.DEV) return __APP_VERSION__
+
+  const response = await fetch('/package.json', { cache: 'no-store' })
+  if (!response.ok) {
+    throw new Error(`The package version could not be loaded (HTTP ${response.status}).`)
+  }
+
+  const packageManifest = await response.json() as { version?: unknown }
+  if (typeof packageManifest.version !== 'string' || !packageManifest.version) {
+    throw new Error('The package manifest does not contain a valid version.')
+  }
+  return packageManifest.version
+}
+
 const parseUsDate = (value: string) => {
   const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value)
   if (!match) return ''
@@ -235,10 +250,11 @@ function App() {
       checking = true
 
       try {
+        const applicationVersion = await getApplicationVersion()
         const result = await AppVersionHistoryService.getAll({
           filter: "AppName eq 'philanthropy'",
           top: 1,
-          select: ['AppName', 'Version'],
+          select: ['Version'],
         })
         if (!active) return
         if (!result.success) {
@@ -246,21 +262,19 @@ function App() {
           return
         }
 
-        const databaseVersion = result.data.find(
-          (record) => record.AppName === 'philanthropy',
-        )?.Version?.trim()
+        const databaseVersion = result.data[0]?.Version?.trim()
         if (!databaseVersion) {
           console.error('No application version was found for AppName "philanthropy".')
           return
         }
 
         setDatabaseVersion(databaseVersion)
-        if (databaseVersion === __APP_VERSION__) {
+        if (databaseVersion === applicationVersion) {
           sessionStorage.removeItem(reloadGuardKey)
           return
         }
 
-        const reloadGuardValue = `${__APP_VERSION__}:${databaseVersion}`
+        const reloadGuardValue = `${applicationVersion}:${databaseVersion}`
         if (sessionStorage.getItem(reloadGuardKey) === reloadGuardValue) return
         sessionStorage.setItem(reloadGuardKey, reloadGuardValue)
 
@@ -1496,7 +1510,7 @@ function App() {
         </div>
       )}
       <footer className="app-version">
-        App version: {databaseVersion ?? __APP_VERSION__}
+        App version: {databaseVersion ?? 'Loading…'}
       </footer>
     </main>
   )
