@@ -51,7 +51,7 @@
               "tableName": "[dbo].[EFMModuleApprove]"
             },
             "appversionhistory": {
-              "tableName": "AppVersionHistory"
+              "tableName": "[dbo].[AppVersionHistory]"
             }
           }
         }

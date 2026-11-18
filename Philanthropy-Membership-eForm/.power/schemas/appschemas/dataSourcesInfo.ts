@@ -6,8 +6,8 @@
 
 export const dataSourcesInfo = {
   "appversionhistory": {
-    "tableId": "AppVersionHistory",
-    "version": "",
+    "tableId": "[dbo].[AppVersionHistory]",
+    "version": "v2",
     "primaryKey": "AppVersionID",
     "dataSourceType": "Connector",
     "apis": {}
