@@ -4,6 +4,7 @@
  */
 
 // Models
+export * as AppVersionHistoryModel from './models/AppVersionHistoryModel';
 export * as CaseyAdminFlowv1Model from './models/CaseyAdminFlowv1Model';
 export * as CommonModels from './models/CommonModels';
 export * as EFMModuleApproveModel from './models/EFMModuleApproveModel';
@@ -16,6 +17,7 @@ export * as TableCodeModel from './models/TableCodeModel';
 export * as WorkflowLogModel from './models/WorkflowLogModel';
 
 // Services
+export * from './services/AppVersionHistoryService';
 export * from './services/CaseyAdminFlowv1Service';
 export * from './services/EFMModuleApproveService';
 export * from './services/GroupDetailsService';
