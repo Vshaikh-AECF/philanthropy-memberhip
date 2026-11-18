@@ -5,6 +5,13 @@
  */
 
 export const dataSourcesInfo = {
+  "appversionhistory": {
+    "tableId": "AppVersionHistory",
+    "version": "",
+    "primaryKey": "AppVersionID",
+    "dataSourceType": "Connector",
+    "apis": {}
+  },
   "caseyadminflowv1": {
     "tableId": "",
     "version": "",
@@ -50,9 +57,9 @@ export const dataSourcesInfo = {
     "apis": {}
   },
   "groupdetails": {
-    "tableId": "[dbo].[GroupDetails]",
-    "version": "v2",
-    "primaryKey": "GroupID",
+    "tableId": "GroupDetails",
+    "version": "",
+    "primaryKey": "",
     "dataSourceType": "Connector",
     "apis": {}
   },

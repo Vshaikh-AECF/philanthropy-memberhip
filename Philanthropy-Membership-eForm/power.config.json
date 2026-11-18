@@ -21,7 +21,8 @@
         "workflowlog",
         "navigation",
         "groupdetails",
-        "efmmoduleapprove"
+        "efmmoduleapprove",
+        "appversionhistory"
       ],
       "authenticationType": "sqlAuthentication",
       "sharedConnectionId": "/providers/Microsoft.PowerApps/apis/shared_sql/connections/01cd77bc513345a292efacb75f81aea5",
@@ -48,6 +49,9 @@
             },
             "efmmoduleapprove": {
               "tableName": "[dbo].[EFMModuleApprove]"
+            },
+            "appversionhistory": {
+              "tableName": "AppVersionHistory"
             }
           }
         }
