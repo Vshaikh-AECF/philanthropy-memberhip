@@ -4,6 +4,16 @@
   padding: 0 4px 16px;
 }
 
+.app-version {
+  margin-top: 4px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #f7efd3;
+  color: #17244a;
+  font-size: 0.85rem;
+  text-align: right;
+}
+
 .topbar {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(280px, 1.4fr) minmax(150px, 1fr);

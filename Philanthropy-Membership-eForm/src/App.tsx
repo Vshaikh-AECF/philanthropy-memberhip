@@ -6,6 +6,7 @@ import { GroupDetailsService } from './generated/services/GroupDetailsService'
 import { MembershipOrganizationService } from './generated/services/MembershipOrganizationService'
 import { NavigationService } from './generated/services/NavigationService'
 import { Office365UsersService } from './generated/services/Office365UsersService'
+import { AppVersionHistoryService } from './generated/services/AppVersionHistoryService'
 import { PhilanthropyMembershipOrgRequestService } from './generated/services/PhilanthropyMembershipOrgRequestService'
 import { TableCodeService } from './generated/services/TableCodeService'
 import { WorkflowLogService } from './generated/services/WorkflowLogService'
@@ -177,6 +178,7 @@ const getRequestTableCodeId = async () => {
 
 function App() {
   const [organizations, setOrganizations] = useState<MembershipOrganization[]>([])
+  const [databaseVersion, setDatabaseVersion] = useState<string | null>(null)
   const [requester, setRequester] = useState('')
   const [signedInFullName, setSignedInFullName] = useState('')
   const [requesterEmail, setRequesterEmail] = useState('')
@@ -222,6 +224,68 @@ function App() {
   const requestAccessFailed = Boolean(requestId && loadedRequestId === requestId && requestAccessError)
   const isWorkflowLoading = Boolean(savedRequest && loadedWorkflowRequestId !== requestId)
   const isPageLoading = isSubmitting || !contextLoaded || !organizationsLoaded || isRequestLoading || isWorkflowLoading
+
+  useEffect(() => {
+    let active = true
+    let checking = false
+    const reloadGuardKey = 'philanthropy-app-version-reload'
+
+    const checkVersion = async () => {
+      if (checking) return
+      checking = true
+
+      try {
+        const result = await AppVersionHistoryService.getAll({
+          filter: "AppName eq 'philanthropy'",
+          top: 1,
+          select: ['AppName', 'Version'],
+        })
+        if (!active) return
+        if (!result.success) {
+          console.error('The application version could not be loaded:', result.error)
+          return
+        }
+
+        const databaseVersion = result.data.find(
+          (record) => record.AppName === 'philanthropy',
+        )?.Version?.trim()
+        if (!databaseVersion) {
+          console.error('No application version was found for AppName "philanthropy".')
+          return
+        }
+
+        setDatabaseVersion(databaseVersion)
+        if (databaseVersion === __APP_VERSION__) {
+          sessionStorage.removeItem(reloadGuardKey)
+          return
+        }
+
+        const reloadGuardValue = `${__APP_VERSION__}:${databaseVersion}`
+        if (sessionStorage.getItem(reloadGuardKey) === reloadGuardValue) return
+        sessionStorage.setItem(reloadGuardKey, reloadGuardValue)
+
+        const refreshUrl = new URL(window.location.href)
+        refreshUrl.searchParams.set('_appVersionRefresh', String(Date.now()))
+        window.location.replace(refreshUrl.href)
+      } catch (error) {
+        if (active) {
+          console.error('The application version check could not be completed:', error)
+        }
+      } finally {
+        checking = false
+      }
+    }
+
+    void checkVersion()
+    const intervalId = window.setInterval(() => {
+      void checkVersion()
+    }, 5 * 60 * 1000)
+
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -1431,6 +1495,9 @@ function App() {
           </section>
         </div>
       )}
+      <footer className="app-version">
+        App version: {databaseVersion ?? __APP_VERSION__}
+      </footer>
     </main>
   )
 }
