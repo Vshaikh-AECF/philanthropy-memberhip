@@ -57,8 +57,8 @@ export const dataSourcesInfo = {
     "apis": {}
   },
   "groupdetails": {
-    "tableId": "GroupDetails",
-    "version": "",
+    "tableId": "[dbo].[GroupDetails]",
+    "version": "v2",
     "primaryKey": "",
     "dataSourceType": "Connector",
     "apis": {}
