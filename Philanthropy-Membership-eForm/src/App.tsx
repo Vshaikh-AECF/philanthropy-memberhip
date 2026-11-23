@@ -111,6 +111,44 @@ const escapeHtml = (value: string) =>
     "'": '&#39;',
   })[character] ?? character)
 
+const getOrganizationSimilarity = (firstName: string, secondName: string) => {
+  const normalize = (value: string) =>
+    value.toLocaleLowerCase()
+      .replace(/\bprivate\s+limited\b/g, 'pvt ltd')
+      .replace(/\bprivate\s+ltd\b/g, 'pvt ltd')
+      .replace(/\blimited\b/g, 'ltd')
+      .replace(/\bcorporation\b/g, 'corp')
+      .replace(/\bcompany\b/g, 'co')
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+  const first = normalize(firstName)
+  const second = normalize(secondName)
+  if (!first.length || !second.length) return 0
+
+  const editSimilarity = (firstValue: string, secondValue: string) => {
+    let previousRow = Array.from({ length: secondValue.length + 1 }, (_, index) => index)
+    for (let firstIndex = 1; firstIndex <= firstValue.length; firstIndex += 1) {
+      const currentRow = [firstIndex]
+      for (let secondIndex = 1; secondIndex <= secondValue.length; secondIndex += 1) {
+        currentRow[secondIndex] = Math.min(
+          currentRow[secondIndex - 1] + 1,
+          previousRow[secondIndex] + 1,
+          previousRow[secondIndex - 1] + Number(firstValue[firstIndex - 1] !== secondValue[secondIndex - 1]),
+        )
+      }
+      previousRow = currentRow
+    }
+
+    return 1 - previousRow[secondValue.length] / Math.max(firstValue.length, secondValue.length)
+  }
+
+  const inOrderSimilarity = editSimilarity(first.join(''), second.join(''))
+  const reorderedSimilarity = editSimilarity([...first].sort().join(''), [...second].sort().join(''))
+  return Math.max(inOrderSimilarity, reorderedSimilarity)
+}
+
 type EmailWorkflowLog = Awaited<ReturnType<typeof WorkflowLogService.getAll>>['data'][number]
 
 const buildRequestEmailBody = ({
@@ -232,6 +270,17 @@ function App() {
     savedRequest?.Return &&
     savedRequest.RequesterEmail.trim().toLowerCase() === requesterEmail.trim().toLowerCase(),
   )
+  const organizationSuggestions =
+    isNewOrganization && newOrganization.trim().length >= 3 && (!savedRequest || isReturnedRequester)
+      ? organizations
+          .map((organization) => ({
+            organization,
+            similarity: getOrganizationSimilarity(newOrganization, organization.MemberOrganization),
+          }))
+          .filter(({ similarity }) => similarity >= 0.6)
+          .sort((first, second) => second.similarity - first.similarity)
+          .slice(0, 5)
+      : []
   const isDeclined = Boolean(savedRequest?.Decline)
   const isProcessed = workflowLogs[workflowLogs.length - 1]?.ActivityAction === 'Process'
   const isRequestLoading = Boolean(requestId && loadedRequestId !== requestId)
@@ -1192,6 +1241,21 @@ function App() {
                     aria-invalid={Boolean(fieldErrors.newOrganization)}
                     aria-describedby={fieldErrors.newOrganization ? 'new-organization-error' : undefined}
                   />
+                )}
+                {organizationSuggestions.length > 0 && (
+                  <div className="organization-suggestions" role="status" aria-live="polite">
+                    <span className="similar-organizations-badge">Similar organizations found</span>
+                    <h3>Did you mean one of these?</h3>
+                    <ul>
+                      {organizationSuggestions.map(({ organization, similarity }) => (
+                        <li key={organization.Id}>
+                          <span>{organization.MemberOrganization}</span>
+                          <small>Similarity: {Math.round(similarity * 100)}%</small>
+                        </li>
+                      ))}
+                    </ul>
+                    <p>Please verify before creating a new organization.</p>
+                  </div>
                 )}
                 {isNewOrganization && fieldErrors.newOrganization && (
                   <span className="field-error new-organization-error" id="new-organization-error">

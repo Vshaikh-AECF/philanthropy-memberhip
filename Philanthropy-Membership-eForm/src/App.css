@@ -312,6 +312,63 @@
   margin-top: 4px;
 }
 
+.organization-suggestions {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  min-width: 0;
+  color: #171717;
+}
+
+.similar-organizations-badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #ffe1d3;
+  color: #b42318;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.organization-suggestions h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.organization-suggestions ul {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 0 8px;
+  list-style: none;
+}
+
+.organization-suggestions li {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+}
+
+.organization-suggestions li > span {
+  font-size: 1rem;
+}
+
+.organization-suggestions > p {
+  margin: 0;
+  color: #5f5f5f;
+}
+
+.organization-suggestions li > small {
+  color: #b42318;
+  font-size: 0.82rem;
+}
+
+.organization-suggestions > p {
+  font-size: 0.85rem;
+}
+
 .field input:focus,
 .field select:focus,
 .form-panel textarea:focus,
